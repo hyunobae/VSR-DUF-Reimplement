@@ -3,9 +3,95 @@
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+from tensorflow.keras.utils import Sequence
+from tensorflow.keras.layers import ReLU, Softmax
+from tensorflow.keras.models import Model
+from tensorflow.keras import Input
 
-def LoadImage(path, color_mode='RGB', channel_mean=None, modcrop=[0,0,0,0]):
-    '''Load an image using PIL and convert it into specified color space,
+def Model():
+    stp = [[0, 0], [1, 1], [1, 1], [1, 1], [0, 0]]
+    sp = [[0, 0], [0, 0], [1, 1], [1, 1], [0, 0]]
+    relu = tf.keras.layers.Activation('relu')
+    inputs = Input(shape=(128,))
+    x = Conv3D(tf.pad(inputs, sp, mode='CONSTANT'), [1, 3, 3, 3, 64], [1,1,1,1,1], 'VALID', name='conv1')
+    uf = 4
+    F = 64
+    G = 16
+    for r in range(0, 21):
+        t = BatchNorm(x, is_train)
+        t = ReLU(t)
+        t = Conv3D(t, [1,1,1,F,F], [1,1,1,1,1], 'VALID')
+
+        t = BatchNorm(t, is_train)
+        t = ReLU(t)
+        t = Conv3D(tf.pad(t, stp, mode='CONSTANT'), [3,3,3,F,G], [1,1,1,1,1], 'VALID')
+
+        x = tf.concat([x,t], 4)
+        F += G
+
+    for r in range(21, 24):
+        t = BatchNorm(x, is_train)
+        t = ReLU(t)
+        t = Conv3D(t, [1,1,1,f,f], [1,1,1,1,1], 'VALID')
+
+        t = BatchNorm(t, is_train)
+        t = ReLU(t)
+        t = Conv3D(tf.pad(t, sp, mode='CONSTANT'), [3,3,3,F,G,], [1,1,1,1,1], 'VALID')
+        x = tf.concat([x[:, 1:-1], t], 4)
+        F+= G
+
+    x = BatchNorm(x, is_train)
+    x = ReLU(t)
+    x = Conv3D(tf.pad(x, sp, mode='CONSTANT'), [1,3,3,448, 256], [1,1,1,1,1], 'VALID')
+    x = ReLU(t)
+
+    r = Conv3D(x, [1,1,1,256,256], [1,1,1,1,1], 'VALID')
+    r = ReLU(t)
+    r = Conv3D(x, [1,1,1,256,3*uf*uf], [1,1,1,1,1], 'VALID')
+
+    f = Conv3D(x, [1,1,1,256,512], [1,1,1,1,1], 'VALID')
+    f = ReLU(t)
+    f = Conv3D(f, [1,1,1,512,1*5*5*uf*uf], [1,1,1,1,1], 'VALID')
+
+    ds_f = tf.shape(f)
+    f = tf.reshape(f, [ds_f[0], ds_f[1], ds_f[2], de_f[3], 25, uf*uf])
+    f = Softmax(f, axis=4)
+
+    #model_residual = Model(inputs, r)
+    #model_filter = Model(inputs, f)
+    #model = Model(inputs, [r,f]
+
+    xc = []
+    t = DynFilter3D(x[:, 7 // 2:7 // 2 + 1, :, :, c], f[:, 0, :, :, :, :], [1, 5, 5])  # [B,H,W,R*R]
+    t = tf.depth_to_space(t, 4)
+    xc += [t]
+    x = tf.concat(xc, axis=3)
+
+    x = tf.expand_dims(x, axis=1)
+    r = depth_to_space_3D(r, 4)
+    x += r
+
+    model = Model(inputs, x)
+
+    return model
+
+#def G(x):
+#    Fx, Rx = model(x)
+#    x_c = []
+#    t = DynFilter3D(x[:, T_in // 2:T_in // 2 + 1, :, :, c], Fx[:, 0, :, :, :, :], [1, 5, 5])  # [B,H,W,R*R]
+#    t = tf.depth_to_space(t, R)
+#    x_c += [t]
+#    x = tf.concat(x_c, axis=3)
+#
+#    x = tf.expand_dims(x, axis=1)
+#    Rx = depth_to_space_3D(Rx, R)
+#    x += Rx
+#    return x
+#
+
+def LoadImage(path, color_mode='Y', channel_mean=None, modcrop=[0,0,0,0]):
+    '''Load an image us    t = DynFilter3D(x[:
+ing PIL and convert it into specified color space,
     and return it as an numpy array.
 
     https://github.com/fchollet/keras/blob/master/keras/preprocessing/image.py
@@ -37,36 +123,12 @@ def LoadImage(path, color_mode='RGB', channel_mean=None, modcrop=[0,0,0,0]):
     return x
 
 
-he_normal_init = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False)
+he_normal_init = tf.keras.initializers.VarianceScaling(scale=2.0, mode='fan_in')
 
 def BatchNorm(input, is_train, decay=0.999, name='BatchNorm'):
-    '''
-    https://github.com/zsdonghao/tensorlayer/blob/master/tensorlayer/layers.py
-    https://github.com/ry/tensorflow-resnet/blob/master/resnet.py
-    http://stackoverflow.com/questions/38312668/how-does-one-do-inference-with-batch-normalization-with-tensor-flow
-    '''
-    from tensorflow.python.training import moving_averages
-    from tensorflow.python.ops import control_flow_ops
-    
-    axis = list(range(len(input.get_shape()) - 1))
-    fdim = input.get_shape()[-1:]
-    
-    with tf.variable_scope(name):
-        beta = tf.get_variable('beta', fdim, initializer=tf.constant_initializer(value=0.0))
-        gamma = tf.get_variable('gamma', fdim, initializer=tf.constant_initializer(value=1.0))
-        moving_mean = tf.get_variable('moving_mean', fdim, initializer=tf.constant_initializer(value=0.0), trainable=False)
-        moving_variance = tf.get_variable('moving_variance', fdim, initializer=tf.constant_initializer(value=0.0), trainable=False)
-  
-        def mean_var_with_update():
-            batch_mean, batch_variance = tf.nn.moments(input, axis)
-            update_moving_mean = moving_averages.assign_moving_average(moving_mean, batch_mean, decay, zero_debias=True)
-            update_moving_variance = moving_averages.assign_moving_average(moving_variance, batch_variance, decay, zero_debias=True)
-            with tf.control_dependencies([update_moving_mean, update_moving_variance]):
-                return tf.identity(batch_mean), tf.identity(batch_variance)
 
-        mean, variance = control_flow_ops.cond(is_train, mean_var_with_update, lambda: (moving_mean, moving_variance))
+    return tf.keras.layers.BatchNormalization(momentum=decay, epsilon=1e-3, training=is_train)(input) #, tf.stack([mean[0], variance[0], beta[0], gamma[0]])
 
-    return tf.nn.batch_normalization(input, mean, variance, beta, gamma, 1e-3) #, tf.stack([mean[0], variance[0], beta[0], gamma[0]])
 
 def Conv3D(input, kernel_shape, strides, padding, name='Conv3d', W_initializer=he_normal_init, bias=True):
     with tf.variable_scope(name):
@@ -75,19 +137,21 @@ def Conv3D(input, kernel_shape, strides, padding, name='Conv3d', W_initializer=h
             b = tf.get_variable("b", (kernel_shape[-1]),initializer=tf.constant_initializer(value=0.0))
         else:
             b = 0
-        
-    return tf.nn.conv3d(input, W, strides, padding) + b
+
+    return tf.keras.layers.Conv3d(kernel_size=W, strides=strides, padding=padding)(input) + b
+
+
 
 def depth_to_space_3D(x, block_size):
     ds_x = tf.shape(x)
     x = tf.reshape(x, [ds_x[0]*ds_x[1], ds_x[2], ds_x[3], ds_x[4]])
-    
+
     y = tf.depth_to_space(x, block_size)
-    
+
     ds_y = tf.shape(y)
     x = tf.reshape(y, [ds_x[0], ds_x[1], ds_y[1], ds_y[2], ds_y[3]])
     return x
-    
+
 def DynFilter3D(x, F, filter_size):
     '''
     3D Dynamic filtering
@@ -105,8 +169,8 @@ def DynFilter3D(x, F, filter_size):
     x = tf.squeeze(x, axis=3) # b, h, w, R*R
 
     return x
-    
-def Huber(y_true, y_pred, delta, axis=None):
+
+def Huber(y_true, y_pred, delta=0.01, axis=None):
     abs_error = tf.abs(y_pred - y_true)
     quadratic = tf.minimum(abs_error, delta)
     # The following expression is the same in value as
@@ -117,3 +181,21 @@ def Huber(y_true, y_pred, delta, axis=None):
     linear = (abs_error - quadratic)
     losses = 0.5 * quadratic**2 + delta * linear
     return tf.reduce_mean(losses, axis=axis)
+
+class CustomDataloader(Sequence):
+    def __init__(self, x_set, y_set, batch_size, shuffle=False):
+        self.x, self.y = x_set, y_set
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return math.ceil(len(self.x) / self.batch_size)
+
+    def __getitem__(self, idx):
+        indices = self.indices[idx*self.batch_size:(idx+1)*self.batch_size]
+
+        batch_x = [self.x[i] for i in indices]
+        batch_y = [self.y[i] for i in indices]
+
+        return np.array(batch_x), np.array(batch_y)
+
